@@ -1,0 +1,97 @@
+# Dependencies
+node_modules/
+**/node_modules/
+*/node_modules/
+
+# Build outputs
+dist/
+**/dist/
+*/dist/
+build/
+out/
+**/build/
+
+# Environment files
+.env
+.env.local
+.env.production
+.env.development
+.env.test
+**/.env
+!/.env.example
+!hotupdate-server/.env.example
+
+# Logs
+*.log
+logs/
+**/*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Runtime data
+pids
+*.pid
+*.seed
+*.pid.lock
+
+# Coverage
+coverage/
+.nyc_output/
+
+# IDE and editors
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+*.sublime-project
+*.sublime-workspace
+.idea/vendetta.xml
+.idea/tasks.xml
+.idea/usage.statistics.xml
+.idea/dictionaries
+.idea/shelf
+
+# OS files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# Cache
+.cache/
+.parcel-cache/
+.eslintcache
+.turbo/
+.rpt2_cache/
+.rts2_cache_cjs/
+.rts2_cache_es/
+.rts2_cache_umd/
+
+# Temp
+*.tmp
+*.temp
+.tmp/
+.temp/
+
+# Storage data (JSON resource files - managed by admin)
+hotupdate-server/storage/content/
+hotupdate-server/storage/sync-stats.json
+hotupdate-server/storage/update-log.json
+hotupdate-server/storage/version.json
+hotupdate-server/storage/sync-config.json
+
+# PM2
+.pm2/
+*.pid
+
+# Local env overrides
+*.local
