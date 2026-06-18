@@ -13,6 +13,7 @@ export interface Palette {
   style: 'modern' | 'traditional' | 'scandinavian' | 'bohemian';
   region?: RegionCode;
   colors: ColorItem[];
+  _cloudId?: number; // 云端收藏ID（可选）
 }
 
 const PALETTE_LIBRARY: Palette[] = [

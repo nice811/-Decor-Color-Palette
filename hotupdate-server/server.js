@@ -5,6 +5,12 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import 'dotenv/config';
 
+// 导入服务模块
+import db from './database.js';
+import { registerUser, loginUser, getUserFromRequest, authMiddleware } from './authService.js';
+import { getFavorites, addFavorite, deleteFavorite, updateFavoriteName, getFavoritesCount } from './favoriteService.js';
+import { recordVisit, recordAIRequest, getStatsOverview, getAIUsageStats, getVisitStats } from './statsService.js';
+
 // 加载.env环境变量
 if (fs.existsSync(path.join(process.cwd(), '.env'))) {
   fs.readFileSync(path.join(process.cwd(), '.env'), 'utf-8')
@@ -570,6 +576,9 @@ app.post('/api/ai/generate-palette', async (req, res) => {
       remaining: rateCheck.remaining
     });
 
+    // 记录AI成功统计
+    recordAIRequest('success');
+
     res.json({
       success: true,
       data: colors,
@@ -595,6 +604,9 @@ app.post('/api/ai/generate-palette', async (req, res) => {
 
     // 返回备用配色
     const fallbackColors = getRandomFallbackPalette();
+
+    // 记录AI降级统计
+    recordAIRequest('fallback');
 
     res.json({
       success: true,
@@ -854,54 +866,177 @@ app.post('/api/cache/clear', (req, res) => {
 });
 
 // ============================================
-// 数据库预留接口（第二阶段使用）
+// 用户认证接口（第二阶段已实现）
 // ============================================
 
 /**
- * 用户注册接口（预留）
+ * 用户注册接口
  * POST /api/auth/register
  */
 app.post('/api/auth/register', (req, res) => {
-  res.status(501).json({
-    success: false,
-    error: 'not_implemented',
-    message: 'Database integration pending (Phase 2)'
-  });
+  const { username, password, email } = req.body;
+  const result = registerUser(username, password, email);
+
+  if (result.success) {
+    res.json(result);
+  } else {
+    res.status(400).json(result);
+  }
 });
 
 /**
- * 用户登录接口（预留）
+ * 用户登录接口
  * POST /api/auth/login
  */
 app.post('/api/auth/login', (req, res) => {
-  res.status(501).json({
-    success: false,
-    error: 'not_implemented',
-    message: 'Database integration pending (Phase 2)'
+  const { username, password } = req.body;
+  const result = loginUser(username, password);
+
+  if (result.success) {
+    res.json(result);
+  } else {
+    res.status(401).json(result);
+  }
+});
+
+/**
+ * 获取当前用户信息
+ * GET /api/auth/me
+ */
+app.get('/api/auth/me', authMiddleware, (req, res) => {
+  const favoritesCount = getFavoritesCount(req.user.userId);
+  res.json({
+    success: true,
+    data: {
+      id: req.user.userId,
+      username: req.user.username,
+      favoritesCount
+    }
   });
 });
 
 /**
- * 获取用户收藏（预留）
+ * 验证Token有效性
+ * GET /api/auth/verify
+ */
+app.get('/api/auth/verify', (req, res) => {
+  const user = getUserFromRequest(req);
+  if (user) {
+    res.json({
+      valid: true,
+      user: {
+        id: user.userId,
+        username: user.username
+      }
+    });
+  } else {
+    res.json({
+      valid: false
+    });
+  }
+});
+
+// ============================================
+// 收藏管理接口（第二阶段已实现）
+// ============================================
+
+/**
+ * 获取用户收藏列表
  * GET /api/favorites
  */
-app.get('/api/favorites', (req, res) => {
-  res.status(501).json({
-    success: false,
-    error: 'not_implemented',
-    message: 'Database integration pending (Phase 2)'
+app.get('/api/favorites', authMiddleware, (req, res) => {
+  const favorites = getFavorites(req.user.userId);
+  res.json({
+    success: true,
+    data: favorites
   });
 });
 
 /**
- * 添加收藏（预留）
+ * 添加收藏
  * POST /api/favorites
  */
-app.post('/api/favorites', (req, res) => {
-  res.status(501).json({
-    success: false,
-    error: 'not_implemented',
-    message: 'Database integration pending (Phase 2)'
+app.post('/api/favorites', authMiddleware, (req, res) => {
+  const { palette_name, color_data } = req.body;
+  const result = addFavorite(req.user.userId, palette_name, color_data);
+
+  if (result.success) {
+    res.json(result);
+  } else {
+    res.status(400).json(result);
+  }
+});
+
+/**
+ * 更新收藏名称
+ * PUT /api/favorites/:id
+ */
+app.put('/api/favorites/:id', authMiddleware, (req, res) => {
+  const { id } = req.params;
+  const { palette_name } = req.body;
+  const result = updateFavoriteName(req.user.userId, parseInt(id), palette_name);
+
+  if (result.success) {
+    res.json(result);
+  } else {
+    res.status(400).json(result);
+  }
+});
+
+/**
+ * 删除收藏
+ * DELETE /api/favorites/:id
+ */
+app.delete('/api/favorites/:id', authMiddleware, (req, res) => {
+  const { id } = req.params;
+  const result = deleteFavorite(req.user.userId, parseInt(id));
+
+  if (result.success) {
+    res.json(result);
+  } else {
+    res.status(400).json(result);
+  }
+});
+
+// ============================================
+// 统计接口（第二阶段已实现）
+// ============================================
+
+/**
+ * 获取统计概览
+ * GET /api/stats/overview
+ */
+app.get('/api/stats/overview', (req, res) => {
+  const stats = getStatsOverview();
+  res.json({
+    success: true,
+    data: stats
+  });
+});
+
+/**
+ * 获取AI使用统计
+ * GET /api/stats/ai-usage
+ */
+app.get('/api/stats/ai-usage', (req, res) => {
+  const days = parseInt(req.query.days) || 7;
+  const stats = getAIUsageStats(days);
+  res.json({
+    success: true,
+    data: stats
+  });
+});
+
+/**
+ * 获取访问统计
+ * GET /api/stats/visits
+ */
+app.get('/api/stats/visits', (req, res) => {
+  const days = parseInt(req.query.days) || 30;
+  const stats = getVisitStats(days);
+  res.json({
+    success: true,
+    data: stats
   });
 });
 

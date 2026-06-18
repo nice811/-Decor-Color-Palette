@@ -4,7 +4,10 @@ import LanguageSwitcher from '@/components/LanguageSwitcher';
 import RegionSwitcher from '@/components/RegionSwitcher';
 import ColorPalette from '@/components/ColorPalette';
 import FilterPanel from '@/components/FilterPanel';
+import { AuthModal } from '@/components/AuthModal';
 import { useFavorites } from '@/hooks/useFavorites';
+import { useAuth } from '@/contexts/AuthContext';
+import { AuthProvider } from '@/contexts/AuthContext';
 import { useHotUpdateSync } from '@/hooks/useHotUpdateSync';
 import { updateTranslations } from '@/i18n';
 import {
@@ -19,9 +22,10 @@ type TabKey = 'home' | 'generator' | 'favorites';
 
 const HOTUPDATE_BASE_URL = import.meta.env.VITE_BACKEND_API || import.meta.env.VITE_HOTUPDATE_URL || 'http://localhost:3001';
 
-function App() {
+function AppContent() {
   const { t } = useTranslation('common');
   const { favorites, toggleFavorite, isFavorite } = useFavorites();
+  const { user, isLoggedIn, logout, addToCloudFavorites, removeFromCloudFavorites, cloudFavorites } = useAuth();
   const [activeTab, setActiveTab] = useState<TabKey>('home');
   const [selectedRoom, setSelectedRoom] = useState<Palette['room'] | undefined>(undefined);
   const [selectedStyle, setSelectedStyle] = useState<Palette['style'] | undefined>(undefined);
@@ -36,6 +40,11 @@ function App() {
     type: 'success' | 'fallback' | 'error' | null;
     message: string;
   }>({ type: null, message: '' });
+
+  // 认证弹窗状态
+  const [showAuthModal, setShowAuthModal] = useState(false);
+  const [authModalMode, setAuthModalMode] = useState<'login' | 'register'>('login');
+  const [showUserMenu, setShowUserMenu] = useState(false);
 
   const { content, loading: hotUpdateLoading, version } = useHotUpdateSync({
     baseUrl: HOTUPDATE_BASE_URL,
@@ -257,6 +266,48 @@ function App() {
               loading={regionLoading}
             />
             <LanguageSwitcher />
+            {/* 用户登录/菜单 */}
+            {isLoggedIn ? (
+              <div className="relative">
+                <button
+                  onClick={() => setShowUserMenu(!showUserMenu)}
+                  className="flex items-center gap-2 px-3 py-2 bg-gradient-to-r from-blue-100 to-purple-100 rounded-lg hover:shadow-md transition-all"
+                >
+                  <div className="w-8 h-8 bg-gradient-to-r from-blue-600 to-purple-600 rounded-full flex items-center justify-center text-white font-bold text-sm">
+                    {user?.username?.charAt(0).toUpperCase() || 'U'}
+                  </div>
+                  <span className="text-sm font-medium text-gray-700 hidden sm:inline">
+                    {user?.username}
+                  </span>
+                </button>
+                {showUserMenu && (
+                  <div className="absolute right-0 top-full mt-2 bg-white rounded-lg shadow-lg border py-2 min-w-[150px] z-30">
+                    <div className="px-4 py-2 text-sm text-gray-500 border-b">
+                      {user?.email || user?.username}
+                    </div>
+                    <button
+                      onClick={() => {
+                        logout();
+                        setShowUserMenu(false);
+                      }}
+                      className="w-full px-4 py-2 text-left text-sm text-red-600 hover:bg-red-50 transition-colors"
+                    >
+                      {t('auth_logout', { defaultValue: 'Logout' })}
+                    </button>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <button
+                onClick={() => {
+                  setAuthModalMode('login');
+                  setShowAuthModal(true);
+                }}
+                className="px-4 py-2 bg-gradient-to-r from-blue-600 to-purple-600 text-white font-medium rounded-lg hover:shadow-md transition-all"
+              >
+                {t('auth_login_title', { defaultValue: 'Login' })}
+              </button>
+            )}
           </div>
         </div>
         <nav className="max-w-7xl mx-auto px-4 py-3 border-t flex gap-2">
@@ -433,7 +484,22 @@ function App() {
           🎨 {mergedPalettes.length} {t('footer_count', { defaultValue: 'curated palettes available' })}
         </p>
       </footer>
+
+      {/* 认证弹窗 */}
+      <AuthModal
+        isOpen={showAuthModal}
+        onClose={() => setShowAuthModal(false)}
+        initialMode={authModalMode}
+      />
     </div>
+  );
+}
+
+function App() {
+  return (
+    <AuthProvider>
+      <AppContent />
+    </AuthProvider>
   );
 }
 
