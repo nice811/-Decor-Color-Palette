@@ -37,5 +37,12 @@
   "region_desc_west": "Skandinavische Neutraltöne + Erdtöne",
   "region_desc_sea": "Tropische Orangen + Ozeanblau",
   "region_desc_jpkr": "Washi-Weiß + Indigo & Sakura",
-  "currently_showing": "Aktuell angezeigt: {{region}}-Paletten"
+  "currently_showing": "Aktuell angezeigt: {{region}}-Paletten",
+  "ai_loading": "Palette wird mit KI generiert...",
+  "ai_success": "Palette erfolgreich generiert",
+  "ai_fallback": "Verwende Preset-Palette (KI-Dienst nicht verfügbar)",
+  "ai_error_timeout": "Zeitüberschreitung, bitte erneut versuchen",
+  "ai_error_network": "Netzwerkfehler, bitte Verbindung prüfen",
+  "ai_error_rate_limit": "Zu viele Anfragen, bitte einen Moment warten",
+  "ai_error_generic": "Dienstfehler, bitte später erneut versuchen"
 }

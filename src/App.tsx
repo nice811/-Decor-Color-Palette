@@ -9,12 +9,11 @@ import { useHotUpdateSync } from '@/hooks/useHotUpdateSync';
 import { updateTranslations } from '@/i18n';
 import {
   Palette,
-  getPalettesByFilter,
-  generateRandomPalette,
   PALETTE_LIBRARY,
   REGION_PROFILES,
 } from '@/data/colors';
 import { detectRegion, RegionCode } from '@/utils/regionDetector';
+import { generatePaletteWithAI, GeneratePaletteParams } from '@/services/aiPaletteService';
 
 type TabKey = 'home' | 'generator' | 'favorites';
 
@@ -30,7 +29,14 @@ function App() {
   const [detectedCountry, setDetectedCountry] = useState<string>('');
   const [regionLoading, setRegionLoading] = useState<boolean>(true);
   const [generatedPalette, setGeneratedPalette] = useState<Palette | null>(null);
-  
+
+  // AI生成相关状态
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [aiStatus, setAiStatus] = useState<{
+    type: 'success' | 'fallback' | 'error' | null;
+    message: string;
+  }>({ type: null, message: '' });
+
   const { content, loading: hotUpdateLoading, version } = useHotUpdateSync({
     baseUrl: HOTUPDATE_BASE_URL,
     enabled: import.meta.env.PROD,
@@ -92,13 +98,86 @@ function App() {
     [selectedRoom, selectedStyle, selectedRegion, mergedPalettes]
   );
 
-  const handleGenerate = () => {
+  /**
+   * 处理配色生成
+   * 优先调用AI接口，失败时使用本地算法
+   */
+  const handleGenerate = async () => {
     const room = selectedRoom || 'living';
     const style = selectedStyle || 'modern';
     const region = selectedRegion || 'west';
-    
-    const profile = mergedRegionParams[region] || mergedRegionParams.west;
-    
+
+    setIsGenerating(true);
+    setAiStatus({ type: null, message: '' });
+
+    // 清除之前的状态
+    setTimeout(() => {
+      setAiStatus({ type: null, message: '' });
+    }, 3000);
+
+    try {
+      // 调用AI接口生成配色
+      const params: GeneratePaletteParams = {
+        region: region as GeneratePaletteParams['region'],
+        room: room as GeneratePaletteParams['room'],
+        style: style as GeneratePaletteParams['style'],
+      };
+
+      const response = await generatePaletteWithAI(params);
+
+      if (response.success && response.data.length > 0) {
+        // AI成功返回配色
+        const newPalette: Palette = {
+          id: `ai-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+          name: `AI Generated ${Math.round(Math.random() * 360)}°`,
+          room: room as Palette['room'],
+          style: style as Palette['style'],
+          region: region as Palette['region'],
+          colors: response.data.map((color, index) => ({
+            hex: color.hex,
+            name: color.name,
+            role: ['background', 'primary', 'secondary', 'neutral', 'accent'][index] || 'accent',
+          })),
+        };
+
+        setGeneratedPalette(newPalette);
+        setActiveTab('generator');
+
+        // 显示成功提示
+        if (response.fallback) {
+          setAiStatus({
+            type: 'fallback',
+            message: t('ai_fallback', { defaultValue: 'Using preset palette (AI service unavailable)' })
+          });
+        } else {
+          setAiStatus({
+            type: 'success',
+            message: t('ai_success', { defaultValue: 'Palette generated successfully' })
+          });
+        }
+      } else {
+        // AI返回失败，使用本地算法
+        await generateLocalPalette(room, style, region);
+      }
+    } catch (err) {
+      // 网络错误或其他异常，使用本地算法
+      console.error('AI generation failed, using local algorithm:', err);
+      setAiStatus({
+        type: 'error',
+        message: t('ai_error_network', { defaultValue: 'Network error, using local algorithm' })
+      });
+      await generateLocalPalette(room, style, region);
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
+  /**
+   * 使用本地算法生成配色（备用方案）
+   */
+  const generateLocalPalette = async (room: string, style: string, region: string) => {
+    const profile = mergedRegionParams[region as keyof typeof mergedRegionParams] || mergedRegionParams.west;
+
     const baseHue = pickHue(profile.hueRanges);
     const baseSat = rand(profile.saturation[0], profile.saturation[1]);
     const baseLight = rand(profile.lightness[0], profile.lightness[1]);
@@ -110,18 +189,18 @@ function App() {
       baseSat * 0.9,
       Math.max(0.35, baseLight - 0.20)
     );
-    const neutralLight = rand(profile.neutralLightness[0], profile.neutralLightness[1]);
+    const neutralLight = rand(profile.neutralLightness?.[0] || 0.7, profile.neutralLightness?.[1] || 0.9);
     const neutral = hslToRgb(baseHue, baseSat * 0.15, neutralLight);
 
-    const accentHue = pickHue(profile.accentHueRanges);
+    const accentHue = pickHue(profile.accentHueRanges || [[15, 35], [195, 215]]);
     const accent = hslToRgb(accentHue, baseSat * 1.3, Math.max(0.3, baseLight - 0.30));
 
-    setGeneratedPalette({
+    const newPalette: Palette = {
       id: `gen-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
-      name: `${profile.name} ${Math.round(baseHue)}°`,
-      room,
-      style,
-      region,
+      name: `${profile.name || 'Generated'} ${Math.round(baseHue)}°`,
+      room: room as Palette['room'],
+      style: style as Palette['style'],
+      region: region as Palette['region'],
       colors: [
         { hex: bg, name: 'Background', role: 'background' },
         { hex: primary, name: 'Primary', role: 'primary' },
@@ -129,7 +208,10 @@ function App() {
         { hex: neutral, name: 'Neutral', role: 'neutral' },
         { hex: accent, name: 'Accent', role: 'accent' },
       ],
-    });
+    };
+
+    setGeneratedPalette(newPalette);
+    setActiveTab('generator');
   };
 
   const tabClass = (tab: TabKey, active: boolean) =>
@@ -161,7 +243,7 @@ function App() {
           v{version}
         </div>
       )}
-      
+
       <header className="bg-white shadow-sm sticky top-0 z-20">
         <div className="max-w-7xl mx-auto px-4 py-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
           <h1 className="text-xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
@@ -213,10 +295,18 @@ function App() {
                 🌐 {t('currently_showing', { region: regionTitle, defaultValue: `Currently showing: {{region}}` })}
               </p>
               <button
-                onClick={() => setActiveTab('generator')}
-                className="px-8 py-4 bg-gradient-to-r from-blue-600 to-purple-600 text-white font-bold rounded-2xl shadow-lg hover:shadow-2xl hover:scale-105 transition-all text-lg"
+                onClick={handleGenerate}
+                disabled={isGenerating}
+                className="px-8 py-4 bg-gradient-to-r from-blue-600 to-purple-600 text-white font-bold rounded-2xl shadow-lg hover:shadow-2xl hover:scale-105 transition-all text-lg disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 mx-auto"
               >
-                🚀 {t('btn_generate', { defaultValue: 'Generate Palette' })}
+                {isGenerating ? (
+                  <>
+                    <div className="animate-spin rounded-full h-5 w-5 border-2 border-white border-t-transparent"></div>
+                    {t('ai_loading', { defaultValue: 'Generating...' })}
+                  </>
+                ) : (
+                  <>🚀 {t('btn_generate', { defaultValue: 'Generate Palette' })}</>
+                )}
               </button>
             </div>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 max-w-3xl mx-auto">
@@ -251,7 +341,22 @@ function App() {
               onStyleChange={setSelectedStyle}
               onRegionChange={setSelectedRegion}
               onGenerate={handleGenerate}
+              isGenerating={isGenerating}
             />
+
+            {/* AI状态提示 */}
+            {aiStatus.type && (
+              <div className={`mb-6 p-4 rounded-xl text-center ${
+                aiStatus.type === 'success' ? 'bg-green-100 text-green-800' :
+                aiStatus.type === 'fallback' ? 'bg-yellow-100 text-yellow-800' :
+                'bg-red-100 text-red-800'
+              }`}>
+                {aiStatus.type === 'fallback' && '⚠️ '}
+                {aiStatus.type === 'success' && '✅ '}
+                {aiStatus.type === 'error' && '❌ '}
+                {aiStatus.message}
+              </div>
+            )}
 
             {generatedPalette && (
               <div className="mb-8">
@@ -299,7 +404,7 @@ function App() {
             {favorites.length === 0 ? (
               <div className="text-center py-16 bg-white rounded-2xl shadow-md">
                 <div className="text-6xl mb-4">💔</div>
-                <p className="text-gray-500 text-lg">{t('no_favorites', { defaultValue: 'No favorites yet' })}</p>
+                <p className="text-gray-500 text-lg">{t('no_favorites', { defaultValue: 'No favorite palettes yet' })}</p>
                 <button
                   onClick={() => setActiveTab('generator')}
                   className="mt-6 px-6 py-3 bg-blue-600 text-white font-semibold rounded-xl hover:bg-blue-700 transition-all"

@@ -37,5 +37,12 @@
   "region_desc_west": "Nordic neutrals + earthy tones",
   "region_desc_sea": "Tropical oranges + ocean blues",
   "region_desc_jpkr": "Washi whites + indigo & sakura",
-  "currently_showing": "Currently showing: {{region}} palettes"
+  "currently_showing": "Currently showing: {{region}} palettes",
+  "ai_loading": "Generating palette with AI...",
+  "ai_success": "Palette generated successfully",
+  "ai_fallback": "Using preset palette (AI service unavailable)",
+  "ai_error_timeout": "Request timeout, please try again",
+  "ai_error_network": "Network error, please check your connection",
+  "ai_error_rate_limit": "Too many requests, please wait a moment",
+  "ai_error_generic": "Service error, please try again later"
 }

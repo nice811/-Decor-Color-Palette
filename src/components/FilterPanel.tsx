@@ -10,6 +10,7 @@ interface FilterPanelProps {
   onStyleChange: (style: Palette['style'] | undefined) => void;
   onRegionChange: (region: RegionCode | undefined) => void;
   onGenerate: () => void;
+  isGenerating?: boolean;
 }
 
 export default function FilterPanel({
@@ -20,6 +21,7 @@ export default function FilterPanel({
   onStyleChange,
   onRegionChange,
   onGenerate,
+  isGenerating = false,
 }: FilterPanelProps) {
   const { t } = useTranslation('common');
 
@@ -144,9 +146,17 @@ export default function FilterPanel({
         <div className="flex items-end justify-start lg:justify-end">
           <button
             onClick={onGenerate}
-            className="w-full lg:w-auto px-6 py-3 bg-gradient-to-r from-blue-600 to-purple-600 text-white font-semibold rounded-xl shadow-md hover:shadow-lg hover:scale-105 transition-all active:scale-95"
+            disabled={isGenerating}
+            className="w-full lg:w-auto px-6 py-3 bg-gradient-to-r from-blue-600 to-purple-600 text-white font-semibold rounded-xl shadow-md hover:shadow-lg hover:scale-105 transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
           >
-            ✨ {t('btn_generate')}
+            {isGenerating ? (
+              <>
+                <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent"></div>
+                {t('ai_loading', { defaultValue: 'Generating...' })}
+              </>
+            ) : (
+              <>✨ {t('btn_generate')}</>
+            )}
           </button>
         </div>
       </div>

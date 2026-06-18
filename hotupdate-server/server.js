@@ -3,30 +3,304 @@ import cors from 'cors';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import 'dotenv/config';
+
+// 加载.env环境变量
+if (fs.existsSync(path.join(process.cwd(), '.env'))) {
+  fs.readFileSync(path.join(process.cwd(), '.env'), 'utf-8')
+    .split('\n')
+    .filter(line => line.trim() && !line.startsWith('#'))
+    .forEach(line => {
+      const [key, ...valueParts] = line.split('=');
+      if (key && valueParts.length) {
+        process.env[key.trim()] = valueParts.join('=').trim();
+      }
+    });
+}
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
 const PORT = process.env.PORT || 3001;
 
-const ALLOWED_LANGUAGES = ['en', 'de', 'fr', 'es', 'it'];
+// ============================================
+// AI配色生成配置（从环境变量读取）
+// ============================================
+const AI_CONFIG = {
+  baseUrl: process.env.AI_BASE_URL || 'http://127.0.0.1:3000/v1',
+  apiKey: process.env.AI_API_KEY || '',
+  model: process.env.AI_MODEL || 'gpt-4o-mini',
+  timeout: parseInt(process.env.AI_TIMEOUT) || 15000, // 默认15秒超时
+  maxRetries: 2 // 最大重试次数
+};
+
+// 语言支持配置
+const ALLOWED_LANGUAGES = ['en', 'de', 'it']; // 英文、意大利语
 
 // CORS配置：从环境变量读取允许的前端域名
 const ALLOW_ORIGIN = process.env.ALLOW_ORIGIN || '*';
+
 app.use(cors({
   origin: ALLOW_ORIGIN,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization']
 }));
+
 app.use(express.json({ limit: '10mb' }));
 app.use(express.static(path.join(__dirname, 'admin', 'dist')));
 
+// ============================================
+// 存储目录配置
+// ============================================
 const STORAGE_DIR = path.join(__dirname, 'storage');
 const VERSION_FILE = path.join(STORAGE_DIR, 'version.json');
 const CONTENT_DIR = path.join(STORAGE_DIR, 'content');
 const LOG_FILE = path.join(STORAGE_DIR, 'update-log.json');
 const SYNC_CONFIG_FILE = path.join(STORAGE_DIR, 'sync-config.json');
 const STATS_FILE = path.join(STORAGE_DIR, 'sync-stats.json');
+const AI_LOG_FILE = path.join(STORAGE_DIR, 'ai-call-log.json');
 
+// ============================================
+// IP风控配置（内存存储，生产环境建议使用Redis）
+// ============================================
+const rateLimitMap = new Map(); // { ip: { count: number, resetTime: number } }
+const RATE_LIMIT_WINDOW = 60 * 1000; // 1分钟窗口
+const RATE_LIMIT_MAX = 5; // 每分钟最多5次
+
+/**
+ * IP限流检查
+ * @param {string} ip - 客户端IP地址
+ * @returns {object} - { allowed: boolean, remaining: number, resetIn: number }
+ */
+function checkRateLimit(ip) {
+  const now = Date.now();
+  const record = rateLimitMap.get(ip);
+
+  // 如果记录不存在或已过期，创建新记录
+  if (!record || now > record.resetTime) {
+    rateLimitMap.set(ip, {
+      count: 1,
+      resetTime: now + RATE_LIMIT_WINDOW
+    });
+    return { allowed: true, remaining: RATE_LIMIT_MAX - 1, resetIn: RATE_LIMIT_WINDOW };
+  }
+
+  // 如果次数超限
+  if (record.count >= RATE_LIMIT_MAX) {
+    return {
+      allowed: false,
+      remaining: 0,
+      resetIn: record.resetTime - now
+    };
+  }
+
+  // 次数+1
+  record.count++;
+  rateLimitMap.set(ip, record);
+
+  return {
+    allowed: true,
+    remaining: RATE_LIMIT_MAX - record.count,
+    resetIn: record.resetTime - now
+  };
+}
+
+// 定期清理过期记录（每5分钟）
+setInterval(() => {
+  const now = Date.now();
+  for (const [ip, record] of rateLimitMap.entries()) {
+    if (now > record.resetTime) {
+      rateLimitMap.delete(ip);
+    }
+  }
+}, 5 * 60 * 1000);
+
+// ============================================
+// AI调用日志记录
+// ============================================
+function logAICall(logEntry) {
+  try {
+    let logs = [];
+    if (fs.existsSync(AI_LOG_FILE)) {
+      logs = JSON.parse(fs.readFileSync(AI_LOG_FILE, 'utf-8'));
+    }
+
+    logs.unshift({
+      id: Date.now().toString(),
+      timestamp: Date.now(),
+      ...logEntry
+    });
+
+    // 保留最近1000条日志
+    if (logs.length > 1000) {
+      logs = logs.slice(0, 1000);
+    }
+
+    fs.writeFileSync(AI_LOG_FILE, JSON.stringify(logs, null, 2));
+  } catch (err) {
+    console.error('Failed to write AI log:', err);
+  }
+}
+
+// ============================================
+// 备用静态配色（AI超时或异常时返回）
+// ============================================
+const FALLBACK_PALETTES = [
+  [
+    { hex: '#E8DED1', name: 'Warm Beige' },
+    { hex: '#5D4E37', name: 'Dark Brown' },
+    { hex: '#C9B99A', name: 'Sand' },
+    { hex: '#8B7355', name: 'Taupe' },
+    { hex: '#F5F0E8', name: 'Cream' }
+  ],
+  [
+    { hex: '#D4E5ED', name: 'Soft Blue' },
+    { hex: '#4A6572', name: 'Slate' },
+    { hex: '#B8C9D4', name: 'Light Steel' },
+    { hex: '#7A9BA8', name: 'Sea Mist' },
+    { hex: '#F0F5F7', name: 'Ice White' }
+  ],
+  [
+    { hex: '#E6DDD4', name: 'Stone' },
+    { hex: '#6B5B4F', name: 'Umber' },
+    { hex: '#A69585', name: 'Warm Gray' },
+    { hex: '#C4B8A8', name: 'Linen' },
+    { hex: '#FAF8F5', name: 'Pearl' }
+  ],
+  [
+    { hex: '#D9E5D6', name: 'Sage Green' },
+    { hex: '#5A6B52', name: 'Forest' },
+    { hex: '#A8C4A2', name: 'Mint' },
+    { hex: '#7A9B73', name: 'Olive' },
+    { hex: '#F2F7EF', name: 'Mint Cream' }
+  ],
+  [
+    { hex: '#F5E6D3', name: 'Champagne' },
+    { hex: '#8B6F47', name: 'Caramel' },
+    { hex: '#D4B896', name: 'Bisque' },
+    { hex: '#C9A77D', name: 'Tan' },
+    { hex: '#FDF8F0', name: 'Linen White' }
+  ]
+];
+
+/**
+ * 获取随机备用配色
+ * @returns {Array} - 5组HEX色值和颜色名称
+ */
+function getRandomFallbackPalette() {
+  const index = Math.floor(Math.random() * FALLBACK_PALETTES.length);
+  return FALLBACK_PALETTES[index];
+}
+
+// ============================================
+// AI配色生成提示词
+// ============================================
+const AI_SYSTEM_PROMPT = `You are a professional home decor color palette generator.
+Generate exactly 5 colors for a home decoration palette.
+Output ONLY valid JSON array, no other text.
+Each color must have:
+- "hex": 6-character hex code (e.g., "#E8DED1")
+- "name": English color name (e.g., "Warm Beige")
+
+Example output format:
+[
+  {"hex": "#E8DED1", "name": "Warm Beige"},
+  {"hex": "#5D4E37", "name": "Dark Brown"},
+  {"hex": "#C9B99A", "name": "Sand"},
+  {"hex": "#8B7355", "name": "Taupe"},
+  {"hex": "#F5F0E8", "name": "Cream"}
+]
+
+Rules:
+- Colors should be harmonious and suitable for home interior
+- Include a mix of light and dark tones
+- NO explanation, NO markdown, NO extra text
+- Pure JSON array only`;
+
+const AI_USER_PROMPT_TEMPLATE = `Generate a home decoration color palette with these parameters:
+- Region/Style: {region}
+- Room Type: {room}
+- Decor Style: {style}
+
+Requirements:
+- 5 hex colors with names
+- Harmonious and modern palette
+- Suitable for residential interior
+- Output only JSON array`;
+
+// ============================================
+// AI配色生成函数
+// ============================================
+/**
+ * 调用AI生成配色方案
+ * @param {string} region - 地区风格
+ * @param {string} room - 房间类型
+ * @param {string} style - 装修风格
+ * @returns {Promise<Array>} - 5组HEX色值和颜色名称
+ */
+async function generatePaletteWithAI(region, room, style) {
+  const userPrompt = AI_USER_PROMPT_TEMPLATE
+    .replace('{region}', region)
+    .replace('{room}', room)
+    .replace('{style}', style);
+
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), AI_CONFIG.timeout);
+
+  try {
+    const response = await fetch(`${AI_CONFIG.baseUrl}/chat/completions`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${AI_CONFIG.apiKey}`
+      },
+      body: JSON.stringify({
+        model: AI_CONFIG.model,
+        messages: [
+          { role: 'system', content: AI_SYSTEM_PROMPT },
+          { role: 'user', content: userPrompt }
+        ],
+        temperature: 0.8,
+        max_tokens: 500
+      }),
+      signal: controller.signal
+    });
+
+    clearTimeout(timeoutId);
+
+    if (!response.ok) {
+      throw new Error(`AI API error: ${response.status}`);
+    }
+
+    const data = await response.json();
+    const content = data.choices?.[0]?.message?.content?.trim();
+
+    if (!content) {
+      throw new Error('Empty AI response');
+    }
+
+    // 解析JSON响应
+    let colors = JSON.parse(content);
+
+    // 验证格式
+    if (!Array.isArray(colors) || colors.length !== 5) {
+      throw new Error('Invalid color format from AI');
+    }
+
+    // 标准化输出格式
+    return colors.map(c => ({
+      hex: c.hex?.toUpperCase() || c.Hex?.toUpperCase(),
+      name: c.name || c.Name || 'Color'
+    }));
+
+  } catch (err) {
+    clearTimeout(timeoutId);
+    throw err;
+  }
+}
+
+// ============================================
+// 数据初始化函数
+// ============================================
 function filterLanguages(locales) {
   const filtered = {};
   ALLOWED_LANGUAGES.forEach(lang => {
@@ -36,6 +310,9 @@ function filterLanguages(locales) {
   });
   delete filtered['zh-CN'];
   delete filtered['zh'];
+  delete filtered['de'];
+  delete filtered['fr'];
+  delete filtered['es'];
   return filtered;
 }
 
@@ -54,6 +331,9 @@ function initStorage() {
   if (!fs.existsSync(LOG_FILE)) {
     fs.writeFileSync(LOG_FILE, JSON.stringify([], null, 2));
   }
+  if (!fs.existsSync(AI_LOG_FILE)) {
+    fs.writeFileSync(AI_LOG_FILE, JSON.stringify([], null, 2));
+  }
   if (!fs.existsSync(SYNC_CONFIG_FILE)) {
     fs.writeFileSync(SYNC_CONFIG_FILE, JSON.stringify({
       autoPollingEnabled: true,
@@ -69,6 +349,7 @@ function initStorage() {
       todaySyncRequests: 0,
       last24Hours: [],
       versionRequests: {},
+      aiRequests: 0,
       lastReset: Date.now()
     }, null, 2));
   }
@@ -83,12 +364,12 @@ function initStorage() {
     palettes: [],
     locales: defaultLocales,
     regionParams: {
-      west: { hueRanges: [[0, 40], [180, 230], [30, 60]], saturation: [0.18, 0.35], lightness: [0.72, 0.92], accentHueRanges: [[15, 35], [195, 215], [0, 10]], neutralLightness: [0.75, 0.92] },
-      sea: { hueRanges: [[15, 45], [150, 180], [180, 200]], saturation: [0.45, 0.75], lightness: [0.68, 0.90], accentHueRanges: [[15, 30], [330, 350], [45, 60]], neutralLightness: [0.78, 0.92] },
-      jpkr: { hueRanges: [[30, 50], [200, 230], [100, 140]], saturation: [0.25, 0.55], lightness: [0.70, 0.93], accentHueRanges: [[340, 360], [200, 230], [45, 55]], neutralLightness: [0.78, 0.94] }
+      west: { name: 'Western Style', hueRanges: [[0, 40], [180, 230], [30, 60]], saturation: [0.18, 0.35], lightness: [0.72, 0.92] },
+      sea: { name: 'Southeast Asian', hueRanges: [[15, 45], [150, 180], [180, 200]], saturation: [0.45, 0.75], lightness: [0.68, 0.90] },
+      jpkr: { name: 'Japanese/Korean', hueRanges: [[30, 50], [200, 230], [100, 140]], saturation: [0.25, 0.55], lightness: [0.70, 0.93] }
     },
-    seo: { title: 'Decor Color Palette – Free Home Color Scheme Generator', description: 'Discover perfect color palettes for home decoration.', keywords: 'home color palette, color scheme generator', ogTitle: '', ogDescription: '', faq: [] },
-    siteConfig: { welcomeTitle: 'Decor Color Palette', welcomeDesc: 'Discover perfect color palettes for your home decoration', footerText: 'curated palettes available' }
+    seo: { title: 'Home Color Palette Generator', description: 'Create perfect color palettes for your home', keywords: 'home color, palette, decoration' },
+    siteConfig: { welcomeTitle: 'Home Palette', welcomeDesc: 'Discover perfect color palettes for your home', footerText: 'palettes available' }
   };
 
   contentFiles.forEach(filename => {
@@ -102,6 +383,9 @@ function initStorage() {
 
 initStorage();
 
+// ============================================
+// 读写存储文件函数
+// ============================================
 function readVersion() {
   return JSON.parse(fs.readFileSync(VERSION_FILE, 'utf-8'));
 }
@@ -154,11 +438,10 @@ function logUpdate(action, details = '') {
 function incrementStats(type = 'sync') {
   const stats = readStats();
   stats.totalSyncRequests++;
-  
+
   const now = Date.now();
-  const today = new Date(now).toDateString();
   stats.todaySyncRequests++;
-  
+
   const hour = Math.floor(now / (60 * 60 * 1000));
   const hourBucket = hour - (hour % 1);
   const existing = stats.last24Hours.find(s => s.hour === hourBucket);
@@ -167,12 +450,12 @@ function incrementStats(type = 'sync') {
   } else {
     stats.last24Hours.push({ hour: hourBucket, count: 1 });
   }
-  
+
   stats.last24Hours = stats.last24Hours.filter(s => now - s.hour * 3600000 < 24 * 3600000);
-  
+
   const version = readVersion().version;
   stats.versionRequests[version] = (stats.versionRequests[version] || 0) + 1;
-  
+
   writeStats(stats);
 }
 
@@ -189,6 +472,166 @@ function bumpVersion(changelog) {
   return version;
 }
 
+// ============================================
+// 获取客户端真实IP
+// ============================================
+function getClientIP(req) {
+  return req.headers['x-forwarded-for']?.split(',')[0]?.trim() ||
+         req.headers['x-real-ip'] ||
+         req.connection?.remoteAddress ||
+         req.ip ||
+         'unknown';
+}
+
+// ============================================
+// API路由定义
+// ============================================
+
+// ----------------------------------------
+// AI配色生成接口
+// ----------------------------------------
+/**
+ * POST /api/ai/generate-palette
+ * 生成AI配色方案
+ *
+ * 请求体：
+ * {
+ *   "region": "western" | "southeast" | "japanese",
+ *   "room": "living" | "bedroom" | "kitchen" | "bathroom",
+ *   "style": "modern" | "classic" | "minimalist" | "cozy"
+ * }
+ *
+ * 响应：
+ * {
+ *   "success": true,
+ *   "data": [
+ *     { "hex": "#E8DED1", "name": "Warm Beige" },
+ *     ...
+ *   ],
+ *   "fallback": false,
+ *   "requestId": "xxx"
+ * }
+ */
+app.post('/api/ai/generate-palette', async (req, res) => {
+  const clientIP = getClientIP(req);
+  const requestId = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+
+  // 1. IP风控检查
+  const rateCheck = checkRateLimit(clientIP);
+  if (!rateCheck.allowed) {
+    logAICall({
+      requestId,
+      ip: clientIP,
+      status: 'rate_limited',
+      remaining: 0,
+      resetIn: rateCheck.resetIn
+    });
+
+    return res.status(429).json({
+      success: false,
+      error: 'rate_limit_exceeded',
+      message: 'Too many requests. Please try again later.',
+      resetIn: rateCheck.resetIn,
+      remaining: 0
+    });
+  }
+
+  // 2. 验证请求参数
+  const { region, room, style } = req.body;
+
+  if (!region || !room || !style) {
+    return res.status(400).json({
+      success: false,
+      error: 'missing_parameters',
+      message: 'Missing required parameters: region, room, style'
+    });
+  }
+
+  // 3. 记录AI请求
+  const stats = readStats();
+  stats.aiRequests = (stats.aiRequests || 0) + 1;
+  writeStats(stats);
+
+  console.log(`[AI] Request ${requestId} from ${clientIP}: region=${region}, room=${room}, style=${style}`);
+
+  // 4. 调用AI生成配色
+  try {
+    const colors = await generatePaletteWithAI(region, room, style);
+
+    // 记录成功日志
+    logAICall({
+      requestId,
+      ip: clientIP,
+      region,
+      room,
+      style,
+      status: 'success',
+      responseTime: Date.now(),
+      remaining: rateCheck.remaining
+    });
+
+    res.json({
+      success: true,
+      data: colors,
+      fallback: false,
+      requestId
+    });
+
+  } catch (err) {
+    console.error(`[AI] Request ${requestId} failed:`, err.message);
+
+    // 记录失败日志
+    logAICall({
+      requestId,
+      ip: clientIP,
+      region,
+      room,
+      style,
+      status: 'error',
+      error: err.message,
+      fallback: true,
+      remaining: rateCheck.remaining
+    });
+
+    // 返回备用配色
+    const fallbackColors = getRandomFallbackPalette();
+
+    res.json({
+      success: true,
+      data: fallbackColors,
+      fallback: true,
+      requestId,
+      message: 'AI service unavailable, using fallback palette'
+    });
+  }
+});
+
+// ----------------------------------------
+// AI配置查询接口（仅开发环境）
+// ----------------------------------------
+app.get('/api/ai/config', (req, res) => {
+  const isDev = process.env.NODE_ENV !== 'prod';
+
+  res.json({
+    configured: !!(AI_CONFIG.apiKey && AI_CONFIG.baseUrl),
+    model: AI_CONFIG.model,
+    timeout: AI_CONFIG.timeout,
+    rateLimit: {
+      maxPerMinute: RATE_LIMIT_MAX,
+      windowMs: RATE_LIMIT_WINDOW
+    },
+    // 仅开发环境返回详细配置
+    ...(isDev && {
+      baseUrl: AI_CONFIG.baseUrl,
+      model: AI_CONFIG.model,
+      apiKeyMasked: AI_CONFIG.apiKey ? '***' + AI_CONFIG.apiKey.slice(-4) : 'NOT SET'
+    })
+  });
+});
+
+// ----------------------------------------
+// 版本相关接口
+// ----------------------------------------
 app.get('/api/version', (req, res) => {
   incrementStats('version_check');
   res.json(readVersion());
@@ -198,16 +641,16 @@ app.get('/api/version/compare', (req, res) => {
   const { clientVersion } = req.query;
   const serverVersion = readVersion();
   const config = readSyncConfig();
-  
+
   let shouldUpdate = false;
   let updateType = 'none';
-  
+
   if (clientVersion !== serverVersion.version) {
     shouldUpdate = true;
-    
+
     const clientParts = clientVersion.split('.').map(Number);
     const serverParts = serverVersion.version.split('.').map(Number);
-    
+
     if (serverParts[0] > clientParts[0]) {
       updateType = 'major';
     } else if (serverParts[1] > clientParts[1]) {
@@ -216,7 +659,7 @@ app.get('/api/version/compare', (req, res) => {
       updateType = 'patch';
     }
   }
-  
+
   res.json({
     serverVersion: serverVersion.version,
     clientVersion,
@@ -228,14 +671,23 @@ app.get('/api/version/compare', (req, res) => {
   });
 });
 
+app.post('/api/version/bump', (req, res) => {
+  const { changelog } = req.body;
+  const version = bumpVersion(changelog || 'Manual version bump');
+  res.json({ success: true, version });
+});
+
+// ----------------------------------------
+// 资源内容接口
+// ----------------------------------------
 app.get('/api/content/incremental', (req, res) => {
   const { lastModified } = req.query;
   const clientTime = parseInt(lastModified) || 0;
-  
+
   const contentTypes = ['palettes', 'locales', 'regionParams', 'seo', 'siteConfig'];
   const updates = {};
   let hasUpdates = false;
-  
+
   contentTypes.forEach(type => {
     const filePath = path.join(CONTENT_DIR, `${type}.json`);
     if (fs.existsSync(filePath)) {
@@ -250,7 +702,7 @@ app.get('/api/content/incremental', (req, res) => {
       }
     }
   });
-  
+
   incrementStats('incremental');
   res.json({
     hasUpdates,
@@ -309,6 +761,9 @@ app.post('/api/batch-update', (req, res) => {
   res.json({ success: true, version });
 });
 
+// ----------------------------------------
+// 回滚接口
+// ----------------------------------------
 app.post('/api/rollback', (req, res) => {
   const { version, changelog } = req.body;
   if (!version) {
@@ -323,16 +778,22 @@ app.post('/api/rollback', (req, res) => {
   res.json({ success: true, version: currentVersion });
 });
 
-app.post('/api/version/bump', (req, res) => {
-  const { changelog } = req.body;
-  const version = bumpVersion(changelog || 'Manual version bump');
-  res.json({ success: true, version });
-});
-
+// ----------------------------------------
+// 日志接口
+// ----------------------------------------
 app.get('/api/logs', (req, res) => {
   res.json(JSON.parse(fs.readFileSync(LOG_FILE, 'utf-8')));
 });
 
+app.get('/api/ai/logs', (req, res) => {
+  const limit = parseInt(req.query.limit) || 100;
+  const logs = JSON.parse(fs.readFileSync(AI_LOG_FILE, 'utf-8'));
+  res.json(logs.slice(0, limit));
+});
+
+// ----------------------------------------
+// 同步配置接口
+// ----------------------------------------
 app.get('/api/sync/config', (req, res) => {
   res.json(readSyncConfig());
 });
@@ -344,8 +805,22 @@ app.post('/api/sync/config', (req, res) => {
   res.json({ success: true, config });
 });
 
+// ----------------------------------------
+// 统计接口
+// ----------------------------------------
 app.get('/api/sync/stats', (req, res) => {
-  res.json(readStats());
+  const stats = readStats();
+  // 计算当前风控状态
+  const clientIP = getClientIP(req);
+  const rateCheck = checkRateLimit(clientIP);
+
+  res.json({
+    ...stats,
+    rateLimit: {
+      remaining: rateCheck.remaining,
+      resetIn: rateCheck.resetIn
+    }
+  });
 });
 
 app.post('/api/sync/stats/reset', (req, res) => {
@@ -354,6 +829,7 @@ app.post('/api/sync/stats/reset', (req, res) => {
     todaySyncRequests: 0,
     last24Hours: [],
     versionRequests: {},
+    aiRequests: 0,
     lastReset: Date.now()
   };
   writeStats(stats);
@@ -361,6 +837,9 @@ app.post('/api/sync/stats/reset', (req, res) => {
   res.json({ success: true });
 });
 
+// ----------------------------------------
+// 缓存管理接口
+// ----------------------------------------
 app.post('/api/cache/clear', (req, res) => {
   const version = readVersion();
   const parts = version.version.split('.');
@@ -374,16 +853,81 @@ app.post('/api/cache/clear', (req, res) => {
   res.json({ success: true, version: newVersion });
 });
 
+// ============================================
+// 数据库预留接口（第二阶段使用）
+// ============================================
+
+/**
+ * 用户注册接口（预留）
+ * POST /api/auth/register
+ */
+app.post('/api/auth/register', (req, res) => {
+  res.status(501).json({
+    success: false,
+    error: 'not_implemented',
+    message: 'Database integration pending (Phase 2)'
+  });
+});
+
+/**
+ * 用户登录接口（预留）
+ * POST /api/auth/login
+ */
+app.post('/api/auth/login', (req, res) => {
+  res.status(501).json({
+    success: false,
+    error: 'not_implemented',
+    message: 'Database integration pending (Phase 2)'
+  });
+});
+
+/**
+ * 获取用户收藏（预留）
+ * GET /api/favorites
+ */
+app.get('/api/favorites', (req, res) => {
+  res.status(501).json({
+    success: false,
+    error: 'not_implemented',
+    message: 'Database integration pending (Phase 2)'
+  });
+});
+
+/**
+ * 添加收藏（预留）
+ * POST /api/favorites
+ */
+app.post('/api/favorites', (req, res) => {
+  res.status(501).json({
+    success: false,
+    error: 'not_implemented',
+    message: 'Database integration pending (Phase 2)'
+  });
+});
+
+// ============================================
+// 静态文件服务（管理后台）
+// ============================================
 app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, 'admin', 'dist', 'index.html'));
 });
 
+// ============================================
+// 服务启动
+// ============================================
 app.listen(PORT, () => {
   console.log('========================================');
   console.log(`🌐 Node_ENV: ${process.env.NODE_ENV || 'development'}`);
   console.log(`🔥 Server running on http://localhost:${PORT}`);
   console.log(`📦 Admin panel: http://localhost:${PORT}/admin`);
   console.log(`🌍 CORS origin: ${ALLOW_ORIGIN}`);
-  console.log(`🔒 Language isolation: Only ${ALLOWED_LANGUAGES.join('/')} allowed (NO Chinese)`);
+  console.log(`🔒 Language isolation: Only ${ALLOWED_LANGUAGES.join('/')} allowed`);
+  console.log('----------------------------------------');
+  console.log(`🤖 AI Config:`);
+  console.log(`   Base URL: ${AI_CONFIG.baseUrl}`);
+  console.log(`   Model: ${AI_CONFIG.model}`);
+  console.log(`   Timeout: ${AI_CONFIG.timeout}ms`);
+  console.log(`   API Key: ${AI_CONFIG.apiKey ? '***' + AI_CONFIG.apiKey.slice(-4) : 'NOT SET'}`);
+  console.log(`   Rate Limit: ${RATE_LIMIT_MAX} requests/minute per IP`);
   console.log('========================================');
 });

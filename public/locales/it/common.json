@@ -37,5 +37,12 @@
   "region_desc_west": "Neutri nordici + toni terra",
   "region_desc_sea": "Arancioni tropicali + blu oceanici",
   "region_desc_jpkr": "Bianchi Washi + indaco & sakura",
-  "currently_showing": "Visualizzazione attuale: palette {{region}}"
+  "currently_showing": "Visualizzazione attuale: palette {{region}}",
+  "ai_loading": "Generazione palette con AI...",
+  "ai_success": "Palette generata con successo",
+  "ai_fallback": "Uso palette predefinita (servizio AI non disponibile)",
+  "ai_error_timeout": "Timeout richiesta, riprova",
+  "ai_error_network": "Errore di rete, controlla la connessione",
+  "ai_error_rate_limit": "Troppe richieste, attendi un momento",
+  "ai_error_generic": "Errore del servizio, riprova più tardi"
 }
