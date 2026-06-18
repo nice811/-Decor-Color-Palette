@@ -62,5 +62,13 @@
   "auth_user_menu": "用户菜单",
   "auth_login_prompt": "登录后可永久保存",
   "auth_cloud_saved": "已保存到云端",
-  "auth_local_saved": "已保存到本地"
+  "auth_local_saved": "已保存到本地",
+  "export_image": "导出图片",
+  "get_advice": "装修建议",
+  "share": "分享",
+  "copy_link": "复制链接",
+  "decor_advice_title": "装修建议",
+  "loading_advice": "正在生成建议...",
+  "dark_mode": "深色模式",
+  "light_mode": "浅色模式"
 }

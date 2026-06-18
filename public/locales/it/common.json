@@ -69,5 +69,13 @@
   "auth_user_menu": "Menu utente",
   "auth_login_prompt": "Accedi per salvare permanentemente",
   "auth_cloud_saved": "Salvato nel cloud",
-  "auth_local_saved": "Salvato localmente"
+  "auth_local_saved": "Salvato localmente",
+  "export_image": "Esporta",
+  "get_advice": "Consiglio",
+  "share": "Condividi",
+  "copy_link": "Copia Link",
+  "decor_advice_title": "Consiglio Decor",
+  "loading_advice": "Generando consiglio...",
+  "dark_mode": "Modalità Scura",
+  "light_mode": "Modalità Chiara"
 }

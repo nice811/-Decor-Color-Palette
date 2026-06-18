@@ -642,6 +642,81 @@ app.get('/api/ai/config', (req, res) => {
 });
 
 // ----------------------------------------
+// AI装修建议接口
+// ----------------------------------------
+const DECOR_ADVICE_PROMPT = `You are a professional interior design consultant.
+Based on the color palette and room information, provide specific decor advice.
+Output ONLY the advice text, no JSON, no markdown, no extra formatting.
+Keep the advice practical and actionable (2-3 sentences).
+Language: respond in the same language as the user's request.`;
+
+app.post('/api/ai/decor-advice', async (req, res) => {
+  const { paletteName, colors, room, style, language } = req.body;
+  const requestId = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+
+  if (!colors || !room || !style) {
+    return res.status(400).json({
+      success: false,
+      error: 'missing_parameters',
+      message: 'Missing required parameters'
+    });
+  }
+
+  const colorList = colors.map(c => `${c.hex} (${c.name || c.role})`).join(', ');
+  const userPrompt = `Color palette: ${paletteName || 'Custom Palette'}
+Colors: ${colorList}
+Room: ${room}
+Style: ${style}
+Language: ${language || 'en'}
+
+Provide decor advice for this color scheme.`;
+
+  try {
+    const response = await fetch(`${AI_CONFIG.baseUrl}/chat/completions`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${AI_CONFIG.apiKey}`
+      },
+      body: JSON.stringify({
+        model: AI_CONFIG.model,
+        messages: [
+          { role: 'system', content: DECOR_ADVICE_PROMPT },
+          { role: 'user', content: userPrompt }
+        ],
+        temperature: 0.7,
+        max_tokens: 300
+      })
+    });
+
+    if (!response.ok) {
+      throw new Error(`AI API error: ${response.status}`);
+    }
+
+    const data = await response.json();
+    const advice = data.choices?.[0]?.message?.content?.trim();
+
+    if (!advice) {
+      throw new Error('Empty AI response');
+    }
+
+    res.json({
+      success: true,
+      advice,
+      requestId
+    });
+
+  } catch (err) {
+    console.error(`[AI Decor Advice] Request ${requestId} failed:`, err.message);
+    res.json({
+      success: false,
+      error: err.message,
+      requestId
+    });
+  }
+});
+
+// ----------------------------------------
 // 版本相关接口
 // ----------------------------------------
 app.get('/api/version', (req, res) => {

@@ -8,6 +8,7 @@ import { AuthModal } from '@/components/AuthModal';
 import { useFavorites } from '@/hooks/useFavorites';
 import { useAuth } from '@/contexts/AuthContext';
 import { AuthProvider } from '@/contexts/AuthContext';
+import { ThemeProvider, ThemeSwitcher } from '@/contexts/ThemeContext';
 import { useHotUpdateSync } from '@/hooks/useHotUpdateSync';
 import { updateTranslations } from '@/i18n';
 import {
@@ -236,24 +237,24 @@ function AppContent() {
 
   if (hotUpdateLoading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-gray-50 to-blue-50 flex items-center justify-center">
+      <div className="min-h-screen bg-gradient-to-br from-gray-50 to-blue-50 dark:from-dark-bg dark:to-dark-card flex items-center justify-center">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto mb-4"></div>
-          <p className="text-gray-600">Loading...</p>
+          <p className="text-gray-600 dark:text-dark-text">Loading...</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-blue-50">
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-blue-50 dark:from-dark-bg dark:to-dark-card transition-colors duration-300">
       {version && (
         <div className="bg-gray-800 text-gray-300 text-xs py-1 text-center">
           v{version}
         </div>
       )}
 
-      <header className="bg-white shadow-sm sticky top-0 z-20">
+      <header className="bg-white dark:bg-dark-card shadow-sm sticky top-0 z-20 transition-colors duration-300">
         <div className="max-w-7xl mx-auto px-4 py-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
           <h1 className="text-xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
             🎨 {t('welcome_title', { defaultValue: 'Decor Color Palette' })}
@@ -266,6 +267,7 @@ function AppContent() {
               loading={regionLoading}
             />
             <LanguageSwitcher />
+            <ThemeSwitcher />
             {/* 用户登录/菜单 */}
             {isLoggedIn ? (
               <div className="relative">
@@ -479,7 +481,7 @@ function AppContent() {
         )}
       </main>
 
-      <footer className="mt-16 py-8 text-center text-gray-500 text-sm border-t bg-white">
+      <footer className="mt-16 py-8 text-center text-gray-500 dark:text-gray-400 text-sm border-t bg-white dark:bg-dark-card transition-colors duration-300">
         <p>
           🎨 {mergedPalettes.length} {t('footer_count', { defaultValue: 'curated palettes available' })}
         </p>
@@ -497,9 +499,11 @@ function AppContent() {
 
 function App() {
   return (
-    <AuthProvider>
-      <AppContent />
-    </AuthProvider>
+    <ThemeProvider>
+      <AuthProvider>
+        <AppContent />
+      </AuthProvider>
+    </ThemeProvider>
   );
 }
 
