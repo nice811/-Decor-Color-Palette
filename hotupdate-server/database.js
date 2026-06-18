@@ -68,6 +68,31 @@ db.exec(`
   );
 `);
 
+// 用户每日限制表
+db.exec(`
+  CREATE TABLE IF NOT EXISTS user_daily_limits (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    log_date DATE NOT NULL,
+    daily_requests INTEGER NOT NULL DEFAULT 0,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    UNIQUE(user_id, log_date)
+  );
+`);
+
+// IP每日限制表
+db.exec(`
+  CREATE TABLE IF NOT EXISTS ip_daily_limits (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    ip_address TEXT NOT NULL,
+    log_date DATE NOT NULL,
+    daily_requests INTEGER NOT NULL DEFAULT 0,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(ip_address, log_date)
+  );
+`);
+
 // ============================================
 // 创建索引
 // ============================================

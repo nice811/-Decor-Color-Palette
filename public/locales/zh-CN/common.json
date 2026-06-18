@@ -70,5 +70,8 @@
   "decor_advice_title": "装修建议",
   "loading_advice": "正在生成建议...",
   "dark_mode": "深色模式",
-  "light_mode": "浅色模式"
+  "light_mode": "浅色模式",
+  "remaining_count": "剩余次数",
+  "login_for_more": "登录获取更多",
+  "ai_limit_exceeded": "已达每日上限，登录后可获得更多次数！"
 }

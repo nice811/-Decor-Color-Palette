@@ -5,6 +5,7 @@ import RegionSwitcher from '@/components/RegionSwitcher';
 import ColorPalette from '@/components/ColorPalette';
 import FilterPanel from '@/components/FilterPanel';
 import { AuthModal } from '@/components/AuthModal';
+import { AdminStats } from '@/pages/AdminStats';
 import { useFavorites } from '@/hooks/useFavorites';
 import { useAuth } from '@/contexts/AuthContext';
 import { AuthProvider } from '@/contexts/AuthContext';
@@ -38,9 +39,10 @@ function AppContent() {
   // AI生成相关状态
   const [isGenerating, setIsGenerating] = useState(false);
   const [aiStatus, setAiStatus] = useState<{
-    type: 'success' | 'fallback' | 'error' | null;
+    type: 'success' | 'fallback' | 'error' | 'limit' | null;
     message: string;
   }>({ type: null, message: '' });
+  const [remainingCount, setRemainingCount] = useState<number>(10);
 
   // 认证弹窗状态
   const [showAuthModal, setShowAuthModal] = useState(false);
@@ -78,6 +80,17 @@ function AppContent() {
           setRegionLoading(false);
         }
       });
+
+    // 获取剩余生成次数
+    fetch(`${HOTUPDATE_BASE_URL}/api/ai/remaining`)
+      .then(res => res.json())
+      .then(data => {
+        if (!cancelled && data.success) {
+          setRemainingCount(data.data.remaining);
+        }
+      })
+      .catch(() => {});
+
     return () => {
       cancelled = true;
     };
@@ -136,6 +149,9 @@ function AppContent() {
       const response = await generatePaletteWithAI(params);
 
       if (response.success && response.data.length > 0) {
+        // 更新剩余次数
+        setRemainingCount(prev => Math.max(0, prev - 1));
+
         // AI成功返回配色
         const newPalette: Palette = {
           id: `ai-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
@@ -165,6 +181,13 @@ function AppContent() {
             message: t('ai_success', { defaultValue: 'Palette generated successfully' })
           });
         }
+      } else if (response.error === 'daily_limit_exceeded') {
+        // 每日限制
+        setAiStatus({
+          type: 'limit',
+          message: t('ai_limit_exceeded', { defaultValue: 'Daily limit reached. Login for more generations!' })
+        });
+        setRemainingCount(0);
       } else {
         // AI返回失败，使用本地算法
         await generateLocalPalette(room, style, region);
@@ -361,6 +384,18 @@ function AppContent() {
                   <>🚀 {t('btn_generate', { defaultValue: 'Generate Palette' })}</>
                 )}
               </button>
+              {/* 剩余次数提示 */}
+              <p className="text-sm text-gray-500 dark:text-gray-400 mt-2">
+                {t('remaining_count', { defaultValue: 'Remaining' })}: <span className={`font-bold ${remainingCount > 0 ? 'text-green-600' : 'text-red-600'}`}>{remainingCount}</span> / 10
+                {!isLoggedIn && (
+                  <span className="ml-2 text-blue-600 hover:underline cursor-pointer" onClick={() => {
+                    setAuthModalMode('login');
+                    setShowAuthModal(true);
+                  }}>
+                    {t('login_for_more', { defaultValue: 'Login for more' })}
+                  </span>
+                )}
+              </p>
             </div>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 max-w-3xl mx-auto">
               {(['living', 'bedroom', 'kitchen', 'bathroom'] as Palette['room'][]).map(
@@ -400,12 +435,14 @@ function AppContent() {
             {/* AI状态提示 */}
             {aiStatus.type && (
               <div className={`mb-6 p-4 rounded-xl text-center ${
-                aiStatus.type === 'success' ? 'bg-green-100 text-green-800' :
-                aiStatus.type === 'fallback' ? 'bg-yellow-100 text-yellow-800' :
-                'bg-red-100 text-red-800'
+                aiStatus.type === 'success' ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200' :
+                aiStatus.type === 'fallback' ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200' :
+                aiStatus.type === 'limit' ? 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200' :
+                'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200'
               }`}>
                 {aiStatus.type === 'fallback' && '⚠️ '}
                 {aiStatus.type === 'success' && '✅ '}
+                {aiStatus.type === 'limit' && '🚫 '}
                 {aiStatus.type === 'error' && '❌ '}
                 {aiStatus.message}
               </div>
@@ -498,6 +535,17 @@ function AppContent() {
 }
 
 function App() {
+  // 检查是否是后台统计页面
+  const isAdminPage = window.location.pathname === '/admin' || window.location.pathname === '/admin-stats';
+
+  if (isAdminPage) {
+    return (
+      <ThemeProvider>
+        <AdminStats />
+      </ThemeProvider>
+    );
+  }
+
   return (
     <ThemeProvider>
       <AuthProvider>

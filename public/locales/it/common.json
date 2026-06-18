@@ -77,5 +77,8 @@
   "decor_advice_title": "Consiglio Decor",
   "loading_advice": "Generando consiglio...",
   "dark_mode": "Modalità Scura",
-  "light_mode": "Modalità Chiara"
+  "light_mode": "Modalità Chiara",
+  "remaining_count": "Rimanenti",
+  "login_for_more": "Accedi per più",
+  "ai_limit_exceeded": "Limite giornaliero raggiunto. Accedi per più generazioni!"
 }

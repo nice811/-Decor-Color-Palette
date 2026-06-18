@@ -9,7 +9,7 @@ import 'dotenv/config';
 import db from './database.js';
 import { registerUser, loginUser, getUserFromRequest, authMiddleware } from './authService.js';
 import { getFavorites, addFavorite, deleteFavorite, updateFavoriteName, getFavoritesCount } from './favoriteService.js';
-import { recordVisit, recordAIRequest, getStatsOverview, getAIUsageStats, getVisitStats } from './statsService.js';
+import { recordVisit, recordAIRequest, getStatsOverview, getAIUsageStats, getVisitStats, checkDailyLimit, recordDailyUsage } from './statsService.js';
 
 // 加载.env环境变量
 if (fs.existsSync(path.join(process.cwd(), '.env'))) {
@@ -522,7 +522,24 @@ app.post('/api/ai/generate-palette', async (req, res) => {
   const clientIP = getClientIP(req);
   const requestId = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 
-  // 1. IP风控检查
+  // 获取用户ID（如果已登录）
+  const user = getUserFromRequest(req);
+  const userId = user?.userId || null;
+
+  // 1. 每日生成次数限制检查
+  const dailyLimit = checkDailyLimit(userId, clientIP);
+  if (dailyLimit.remaining <= 0 && !dailyLimit.isPremium) {
+    return res.status(429).json({
+      success: false,
+      error: 'daily_limit_exceeded',
+      message: 'Daily free generation limit reached. Please login or try again tomorrow.',
+      limit: dailyLimit.limit,
+      used: dailyLimit.used,
+      remaining: 0
+    });
+  }
+
+  // 2. IP风控检查
   const rateCheck = checkRateLimit(clientIP);
   if (!rateCheck.allowed) {
     logAICall({
@@ -542,7 +559,7 @@ app.post('/api/ai/generate-palette', async (req, res) => {
     });
   }
 
-  // 2. 验证请求参数
+  // 3. 验证请求参数
   const { region, room, style } = req.body;
 
   if (!region || !room || !style) {
@@ -553,14 +570,17 @@ app.post('/api/ai/generate-palette', async (req, res) => {
     });
   }
 
-  // 3. 记录AI请求
+  // 4. 记录AI请求
   const stats = readStats();
   stats.aiRequests = (stats.aiRequests || 0) + 1;
   writeStats(stats);
 
+  // 5. 记录每日使用次数
+  recordDailyUsage(userId, clientIP);
+
   console.log(`[AI] Request ${requestId} from ${clientIP}: region=${region}, room=${room}, style=${style}`);
 
-  // 4. 调用AI生成配色
+  // 6. 调用AI生成配色
   try {
     const colors = await generatePaletteWithAI(region, room, style);
 
@@ -1112,6 +1132,28 @@ app.get('/api/stats/visits', (req, res) => {
   res.json({
     success: true,
     data: stats
+  });
+});
+
+/**
+ * 获取用户/IP剩余生成次数
+ * GET /api/ai/remaining
+ */
+app.get('/api/ai/remaining', (req, res) => {
+  const clientIP = getClientIP(req);
+  const user = getUserFromRequest(req);
+  const userId = user?.userId || null;
+
+  const dailyLimit = checkDailyLimit(userId, clientIP);
+
+  res.json({
+    success: true,
+    data: {
+      remaining: dailyLimit.remaining,
+      limit: dailyLimit.limit,
+      used: dailyLimit.used,
+      isPremium: dailyLimit.isPremium
+    }
   });
 });
 

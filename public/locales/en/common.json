@@ -77,5 +77,8 @@
   "decor_advice_title": "Decor Advice",
   "loading_advice": "Generating advice...",
   "dark_mode": "Dark Mode",
-  "light_mode": "Light Mode"
+  "light_mode": "Light Mode",
+  "remaining_count": "Remaining",
+  "login_for_more": "Login for more",
+  "ai_limit_exceeded": "Daily limit reached. Login for more generations!"
 }

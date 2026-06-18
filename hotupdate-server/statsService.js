@@ -137,3 +137,94 @@ export function getVisitStats(days = 30) {
 
   return stats;
 }
+
+// ============================================
+// 每日免费生成次数限制服务
+// ============================================
+
+const FREE_LIMIT_PER_DAY = 10; // 每日免费生成次数
+
+/**
+ * 检查用户/IP今日剩余生成次数
+ * @param {number|null} userId - 用户ID（登录用户）
+ * @param {string} ip - 客户端IP
+ * @returns {object} - { remaining: number, limit: number, used: number }
+ */
+export function checkDailyLimit(userId, ip) {
+  const today = new Date().toISOString().split('T')[0];
+
+  // 登录用户：查询用户今日使用次数
+  if (userId) {
+    const userUsage = db.prepare(`
+      SELECT daily_requests FROM user_daily_limits
+      WHERE user_id = ? AND log_date = ?
+    `).get(userId, today);
+
+    const used = userUsage?.daily_requests || 0;
+    return {
+      remaining: Math.max(0, FREE_LIMIT_PER_DAY - used),
+      limit: FREE_LIMIT_PER_DAY,
+      used,
+      isPremium: false // 可扩展为付费用户无限制
+    };
+  }
+
+  // 未登录用户：查询IP今日使用次数
+  const ipUsage = db.prepare(`
+    SELECT daily_requests FROM ip_daily_limits
+    WHERE ip_address = ? AND log_date = ?
+  `).get(ip, today);
+
+  const used = ipUsage?.daily_requests || 0;
+  return {
+    remaining: Math.max(0, FREE_LIMIT_PER_DAY - used),
+    limit: FREE_LIMIT_PER_DAY,
+    used,
+    isPremium: false
+  };
+}
+
+/**
+ * 记录一次生成请求
+ * @param {number|null} userId
+ * @param {string} ip
+ */
+export function recordDailyUsage(userId, ip) {
+  const today = new Date().toISOString().split('T')[0];
+
+  if (userId) {
+    // 用户记录
+    const existing = db.prepare(`
+      SELECT * FROM user_daily_limits WHERE user_id = ? AND log_date = ?
+    `).get(userId, today);
+
+    if (existing) {
+      db.prepare(`
+        UPDATE user_daily_limits SET daily_requests = daily_requests + 1
+        WHERE user_id = ? AND log_date = ?
+      `).run(userId, today);
+    } else {
+      db.prepare(`
+        INSERT INTO user_daily_limits (user_id, log_date, daily_requests)
+        VALUES (?, ?, 1)
+      `).run(userId, today);
+    }
+  } else {
+    // IP记录
+    const existing = db.prepare(`
+      SELECT * FROM ip_daily_limits WHERE ip_address = ? AND log_date = ?
+    `).get(ip, today);
+
+    if (existing) {
+      db.prepare(`
+        UPDATE ip_daily_limits SET daily_requests = daily_requests + 1
+        WHERE ip_address = ? AND log_date = ?
+      `).run(ip, today);
+    } else {
+      db.prepare(`
+        INSERT INTO ip_daily_limits (ip_address, log_date, daily_requests)
+        VALUES (?, ?, 1)
+      `).run(ip, today);
+    }
+  }
+}
