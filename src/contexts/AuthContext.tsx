@@ -4,7 +4,7 @@
  */
 
 import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
-import { User, loginUser, registerUser, verifyToken, getFavorites, addFavorite, deleteFavorite, FavoriteItem } from '@/services/authService';
+import { User, loginUser, registerUser, verifyToken, getFavorites, addFavorite, deleteFavorite, FavoriteItem, loginWithGoogle } from '@/services/authService';
 import { Palette } from '@/data/colors';
 
 interface AuthContextType {
@@ -13,6 +13,7 @@ interface AuthContextType {
   isLoggedIn: boolean;
   loading: boolean;
   login: (username: string, password: string) => Promise<{ success: boolean; error?: string }>;
+  loginGoogle: (credential: string) => Promise<{ success: boolean; error?: string }>;
   register: (username: string, password: string, email?: string) => Promise<{ success: boolean; error?: string }>;
   logout: () => void;
   // 云端收藏
@@ -97,6 +98,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return { success: false, error: result.error || result.message };
   }, []);
 
+  // Google 登录
+  const loginGoogle = useCallback(async (credential: string) => {
+    const result = await loginWithGoogle(credential);
+    if (result.success && result.token && result.data) {
+      setToken(result.token);
+      setUser(result.data);
+      localStorage.setItem(TOKEN_KEY, result.token);
+      localStorage.setItem(USER_KEY, JSON.stringify(result.data));
+      await syncFavoritesInternal(result.token);
+      return { success: true };
+    }
+    return { success: false, error: result.error || result.message };
+  }, []);
+
   // 登出
   const logout = useCallback(() => {
     setToken(null);
@@ -142,6 +157,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         isLoggedIn: !!token && !!user,
         loading,
         login,
+        loginGoogle,
         register,
         logout,
         cloudFavorites,

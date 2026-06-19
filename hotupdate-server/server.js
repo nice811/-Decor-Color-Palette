@@ -8,6 +8,7 @@ import 'dotenv/config';
 // 导入服务模块
 import db from './database.js';
 import { registerUser, loginUser, getUserFromRequest, authMiddleware } from './authService.js';
+import { loginOrRegisterWithGoogle } from './googleOAuthService.js';
 import { getFavorites, addFavorite, deleteFavorite, updateFavoriteName, getFavoritesCount } from './favoriteService.js';
 import { recordVisit, recordAIRequest, getStatsOverview, getAIUsageStats, getVisitStats, checkDailyLimit, recordDailyUsage } from './statsService.js';
 
@@ -965,18 +966,16 @@ app.post('/api/cache/clear', (req, res) => {
 // ============================================
 
 /**
- * 用户注册接口
+ * 用户注册接口（暂时禁用：个人用户无法获得 Google OAuth 授权，
+ * 注册通道同步关闭。启用时将下面一行注释掉即可。）
  * POST /api/auth/register
  */
 app.post('/api/auth/register', (req, res) => {
-  const { username, password, email } = req.body;
-  const result = registerUser(username, password, email);
-
-  if (result.success) {
-    res.json(result);
-  } else {
-    res.status(400).json(result);
-  }
+  res.status(503).json({
+    success: false,
+    error: 'registration_disabled',
+    message: 'Registration is temporarily unavailable. Please login with an existing account.'
+  });
 });
 
 /**
@@ -1029,6 +1028,20 @@ app.get('/api/auth/verify', (req, res) => {
       valid: false
     });
   }
+});
+
+/**
+ * Google OAuth2 登录（暂时禁用：个人用户无法完成 Google Cloud Console 的
+ * OAuth 生产环境验证。启用时将下面一段 body 替换为原始实现即可。）
+ * POST /api/auth/google
+ * 请求体：{ credential: "Google ID Token" }
+ */
+app.post('/api/auth/google', async (req, res) => {
+  res.status(503).json({
+    success: false,
+    error: 'google_auth_disabled',
+    message: 'Google Sign-In is temporarily unavailable. Please login with username and password.'
+  });
 });
 
 // ============================================

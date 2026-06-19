@@ -172,3 +172,25 @@ export async function verifyToken(token: string): Promise<{ valid: boolean; user
     return { valid: false };
   }
 }
+
+/**
+ * Google OAuth2 登录
+ */
+export async function loginWithGoogle(
+  credential: string
+): Promise<AuthResponse> {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/auth/google`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ credential }),
+    });
+    return await response.json();
+  } catch (err) {
+    return {
+      success: false,
+      error: 'network_error',
+      message: 'Network error, please try again',
+    };
+  }
+}

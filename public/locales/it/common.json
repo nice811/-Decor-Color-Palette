@@ -65,6 +65,8 @@
   "auth_error_generic": "Operazione fallita",
   "auth_error_network": "Errore di rete, riprova",
   "auth_error_password_short": "La password deve essere almeno 6 caratteri",
+  "auth_or_google": "oppure continua con",
+  "auth_error_google": "Accesso Google non riuscito, riprova",
   "auth_logout": "Esci",
   "auth_user_menu": "Menu utente",
   "auth_login_prompt": "Accedi per salvare permanentemente",

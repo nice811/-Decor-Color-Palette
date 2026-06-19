@@ -65,6 +65,8 @@
   "auth_error_generic": "Operation failed",
   "auth_error_network": "Network error, please try again",
   "auth_error_password_short": "Password must be at least 6 characters",
+  "auth_or_google": "or continue with",
+  "auth_error_google": "Google login failed, please try again",
   "auth_logout": "Logout",
   "auth_user_menu": "User Menu",
   "auth_login_prompt": "Login to save permanently",

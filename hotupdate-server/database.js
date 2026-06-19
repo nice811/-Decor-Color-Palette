@@ -23,10 +23,18 @@ db.exec(`
     username TEXT NOT NULL UNIQUE,
     password TEXT NOT NULL,
     email TEXT,
+    google_id TEXT UNIQUE,
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
   );
 `);
+
+// 迁移：添加 google_id 字段到已有 users 表
+const checkGoogleIdColumn = db.prepare("SELECT name FROM pragma_table_info('users') WHERE name = 'google_id'").get();
+if (!checkGoogleIdColumn) {
+  db.exec('ALTER TABLE users ADD COLUMN google_id TEXT UNIQUE');
+  console.log('✅ Added google_id column to users table');
+}
 
 // 收藏表
 db.exec(`
@@ -99,6 +107,7 @@ db.exec(`
 
 db.exec(`
   CREATE INDEX IF NOT EXISTS idx_users_username ON users(username);
+  CREATE INDEX IF NOT EXISTS idx_users_google_id ON users(google_id);
   CREATE INDEX IF NOT EXISTS idx_favorites_user_id ON favorites(user_id);
   CREATE INDEX IF NOT EXISTS idx_access_logs_date ON access_logs(visit_date);
   CREATE INDEX IF NOT EXISTS idx_ai_usage_logs_date ON ai_usage_logs(log_date);

@@ -58,6 +58,8 @@
   "auth_error_generic": "操作失败",
   "auth_error_network": "网络错误，请重试",
   "auth_error_password_short": "密码至少需要6个字符",
+  "auth_or_google": "或使用 Google 账号",
+  "auth_error_google": "Google 登录失败，请重试",
   "auth_logout": "退出登录",
   "auth_user_menu": "用户菜单",
   "auth_login_prompt": "登录后可永久保存",
