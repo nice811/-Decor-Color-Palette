@@ -68,7 +68,7 @@ export function useTheme() {
  */
 export function ThemeSwitcher() {
   const { t } = useTranslation('common');
-  const { theme, toggleTheme, isDark } = useTheme();
+  const { toggleTheme, isDark } = useTheme();
 
   return (
     <button

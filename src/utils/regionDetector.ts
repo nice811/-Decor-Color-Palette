@@ -129,7 +129,7 @@ function detectFromBrowserLanguage(): RegionCode {
   if (typeof navigator === 'undefined') return 'west';
   const langs = navigator.languages && navigator.languages.length > 0
     ? navigator.languages
-    : [navigator.language || navigator.userLanguage || 'en'];
+    : [navigator.language || 'en'];
 
   for (const lang of langs) {
     const l = lang.toLowerCase();

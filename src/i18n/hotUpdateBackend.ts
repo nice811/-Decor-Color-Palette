@@ -33,7 +33,7 @@ export class HotUpdateBackend {
     }
   }
 
-  create(language: string, namespace: string, key: string, fallbackValue: string) {}
+  create(_language: string, _namespace: string, _key: string, _fallbackValue: string) {}
 
   services?: any;
   options?: any;

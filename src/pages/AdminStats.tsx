@@ -4,7 +4,6 @@
  */
 
 import { useState, useEffect } from 'react';
-import { useTranslation } from 'react-i18next';
 
 const API_BASE_URL = import.meta.env.VITE_BACKEND_API || 'http://localhost:3001';
 
@@ -33,7 +32,6 @@ interface VisitStats {
 }
 
 export function AdminStats() {
-  const { t } = useTranslation('common');
   const [overview, setOverview] = useState<StatsOverview | null>(null);
   const [aiUsage, setAiUsage] = useState<AIUsageStats[]>([]);
   const [visits, setVisits] = useState<VisitStats[]>([]);

@@ -14,6 +14,7 @@ import { useHotUpdateSync } from '@/hooks/useHotUpdateSync';
 import { updateTranslations } from '@/i18n';
 import {
   Palette,
+  ColorItem,
   PALETTE_LIBRARY,
   REGION_PROFILES,
 } from '@/data/colors';
@@ -27,7 +28,7 @@ const HOTUPDATE_BASE_URL = import.meta.env.VITE_BACKEND_API || import.meta.env.V
 function AppContent() {
   const { t } = useTranslation('common');
   const { favorites, toggleFavorite, isFavorite } = useFavorites();
-  const { user, isLoggedIn, logout, addToCloudFavorites, removeFromCloudFavorites, cloudFavorites } = useAuth();
+  const { user, isLoggedIn, logout } = useAuth();
   const [activeTab, setActiveTab] = useState<TabKey>('home');
   const [selectedRoom, setSelectedRoom] = useState<Palette['room'] | undefined>(undefined);
   const [selectedStyle, setSelectedStyle] = useState<Palette['style'] | undefined>(undefined);
@@ -162,7 +163,7 @@ function AppContent() {
           colors: response.data.map((color, index) => ({
             hex: color.hex,
             name: color.name,
-            role: ['background', 'primary', 'secondary', 'neutral', 'accent'][index] || 'accent',
+            role: (['background', 'primary', 'secondary', 'neutral', 'accent'][index] || 'accent') as ColorItem['role'],
           })),
         };
 
@@ -247,7 +248,7 @@ function AppContent() {
     setActiveTab('generator');
   };
 
-  const tabClass = (tab: TabKey, active: boolean) =>
+  const tabClass = (_tab: TabKey, active: boolean) =>
     `px-4 py-2 rounded-lg font-medium transition-all ${
       active
         ? 'bg-blue-600 text-white shadow-md'
@@ -572,7 +573,7 @@ function rgbToHex(r: number, g: number, b: number): string {
   return (
     '#' +
     [r, g, b]
-      .map((c) => Math.max(0, Math.min(255, Math.round(c)).toString(16).padStart(2, '0')))
+      .map((c) => Math.max(0, Math.min(255, Math.round(c))).toString(16).padStart(2, '0'))
       .join('')
   ).toUpperCase();
 }

@@ -9,9 +9,9 @@ const API_BASE_URL = import.meta.env.VITE_BACKEND_API || 'http://localhost:3001'
  * AI配色生成请求参数
  */
 export interface GeneratePaletteParams {
-  region: 'western' | 'southeast' | 'japanese';
+  region: 'west' | 'sea' | 'jpkr';
   room: 'living' | 'bedroom' | 'kitchen' | 'bathroom';
-  style: 'modern' | 'classic' | 'minimalist' | 'cozy';
+  style: 'modern' | 'traditional' | 'scandinavian' | 'bohemian';
 }
 
 /**

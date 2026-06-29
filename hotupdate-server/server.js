@@ -53,6 +53,13 @@ app.use(cors({
 }));
 
 app.use(express.json({ limit: '10mb' }));
+
+// 访问统计中间件（仅统计 API 请求）
+app.use('/api/', (req, res, next) => {
+  try { recordVisit(); } catch (e) { /* 忽略统计错误 */ }
+  next();
+});
+
 app.use(express.static(path.join(__dirname, 'admin', 'dist')));
 
 // ============================================
